@@ -20,7 +20,52 @@ on:
       - edited
 
 jobs:
+  check-pr:
+    if: ${{  github.event_name == 'pull_request' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup node
+        uses: actions/setup-node@v2.1.2
+        with:
+          node-version: 14
+
+      - name: Install parser cli
+        run: |
+          npm install --global conventional-commits-parser
+
+      - name: Check PR
+        id: check_title
+        run: |
+          declare -a types=("fix" "feat" "refactor")
+          type=`echo "${{ github.event.pull_request.title }}" |  conventional-commits-parser | jq -r '.[].type'`
+          if [[ " ${types[*]} " =~ " ${type} " ]]; then
+            if [[ "${{ github.event.pull_request.body }}" == *"E2E TEST:"* ]]; then
+              echo "::set-output name=passed::true"
+            else
+              echo "::set-output name=passed::false"
+            fi
+          else
+            echo "::set-output name=passed::true"
+          fi
+
+      - name: Search comment
+        if: ${{ steps.check_title.outputs.passed == 'false' }}
+        uses: peter-evans/find-comment@v1
+        id: comments
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-includes: "E2E TEST:"
+
+      - name: Check if test is included in comments
+        if: ${{ steps.check_title.outputs.passed == 'false' }}
+        run: |
+          if [ -z "${{ steps.comments.outputs.comment-id }}" ]; then
+            echo "E2E TEST not found."
+            exit 1
+          fi
+
   setup:
+    if: ${{  github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     outputs:
       cases: ${{ steps.schedule-cases.outputs.cases || steps.dispatch-cases.outputs.cases || steps.pr-cases.outputs.cases }}
