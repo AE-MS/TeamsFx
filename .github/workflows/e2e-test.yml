@@ -19,6 +19,8 @@ jobs:
 
           cases=`echo $result | jq -r '.jobs[] | select(.name | contains("tests.ts")) | .name'`
 
+          declare -A email_display
+
           description="<tr> <th>Case</th> <th>Status</th> <th>Author</th> </tr>"
 
           emails="vsciotadt@microsoft.com"
@@ -50,6 +52,12 @@ jobs:
             fi
             echo $label
 
+            if [ ! -z "$email" && ! -v "email_display[$email]" ]; then
+              resp=$(curl -u :${{ secrets.ADO_PAT }} "https://vssps.dev.azure.com/msazure/_apis/identities?searchFilter=General&filterValue=$email&queryMembership=None&api-version=6.0")
+              display=$(echo $resp | jq '.value | .[] | .providerDisplayName' | xargs echo)
+              email_display[$email]=$display
+            fi
+
             author=""
             if [ -z "$email" ]; then
               author="N/A"
@@ -58,7 +66,7 @@ jobs:
             fi
             echo $author
 
-            description="$description <tr> <td>$file</td> <td>$label<td> <td>$author</td> </tr> "
+            description="$description <tr> <td>$file</td> <td>$label</td> <td>$author</td> </tr> "
           done <<< $cases
 
           echo "::set-output name=description::$description"
