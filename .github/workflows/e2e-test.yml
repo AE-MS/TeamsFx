@@ -2,226 +2,8 @@ name: E2E test
 
 on:
   workflow_dispatch:
-    inputs:
-      cases:
-        description: 'specific cases to be excuted. Sample: ["./aad/a.tests.ts", "./bot/b.tests.ts"]'
-        required: false
-  schedule:
-    - cron: "0 4,7,10 * * *"
-  pull_request:
-    branches:
-      - main
-      - dev
-    types:
-      - assigned
-      - opened
-      - synchronize
-      - reopened
-      - edited
-
 jobs:
-  check-pr:
-    if: ${{  github.event_name == 'pull_request' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Setup node
-        uses: actions/setup-node@v2.1.2
-        with:
-          node-version: 14
-
-      - name: Install parser cli
-        run: |
-          npm install --global conventional-commits-parser
-
-      - name: Check PR
-        id: check_title
-        run: |
-          declare -a types=("fix" "feat" "refactor")
-          type=`echo "${{ github.event.pull_request.title }}" |  conventional-commits-parser | jq -r '.[].type'`
-          if [[ " ${types[*]} " =~ " ${type} " ]]; then
-            if [[ "${{ github.event.pull_request.body }}" == *"E2E TEST:"* ]]; then
-              echo "::set-output name=passed::true"
-            else
-              echo "::set-output name=passed::false"
-            fi
-          else
-            echo "::set-output name=passed::true"
-          fi
-
-      - name: Search comment
-        if: ${{ steps.check_title.outputs.passed == 'false' }}
-        uses: peter-evans/find-comment@v1
-        id: comments
-        with:
-          issue-number: ${{ github.event.pull_request.number }}
-          body-includes: "E2E TEST:"
-
-      - name: Check if test is included in comments
-        if: ${{ steps.check_title.outputs.passed == 'false' }}
-        run: |
-          if [ -z "${{ steps.comments.outputs.comment-id }}" ]; then
-            echo "E2E TEST not found."
-            exit 1
-          fi
-
-  setup:
-    if: ${{  github.event_name != 'pull_request' }}
-    runs-on: ubuntu-latest
-    outputs:
-      cases: ${{ steps.schedule-cases.outputs.cases || steps.dispatch-cases.outputs.cases || steps.pr-cases.outputs.cases }}
-    env:
-      AZURE_ACCOUNT_NAME: ${{ secrets.TEST_USER_NAME }}
-      AZURE_ACCOUNT_OBJECT_ID: ${{ secrets.TEST_USER_OBJECT_ID }}
-      AZURE_ACCOUNT_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.TEST_SUBSCRIPTION_ID }}
-      AZURE_TENANT_ID: ${{ secrets.TEST_TENANT_ID }}
-      M365_ACCOUNT_NAME: ${{ secrets.TEST_USER_NAME }}
-      M365_ACCOUNT_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
-      M365_TENANT_ID: ${{ secrets.TEST_TENANT_ID_2 }}
-      CI_ENABLED: "true"
-      M365_ACCOUNT_COLLABORATOR: ${{ secrets.TEST_COLLABORATOR_USER_NAME }}
-      AZURE_DEVOPS_EXT_PAT: ${{ secrets.ADO_PAT }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Setup node
-        uses: actions/setup-node@v2.1.2
-        with:
-          node-version: 14
-
-      - name: Setup project
-        uses: nick-invision/retry@v2
-        with:
-          timeout_minutes: 10
-          max_attempts: 10
-          retry_on: error
-          command: |
-            npm run setup
-
-      - name: List cases for schedule
-        id: schedule-cases
-        if: ${{  github.event_name == 'schedule' }}
-        working-directory: packages/cli/tests/e2e
-        run: |
-          cases=`find . -wholename "*.tests.ts" | jq -Rsc '[split("\n") | .[]| select(.!="")]'`
-          echo "::set-output name=cases::$cases"
-
-      - name: List cases for dispatch
-        id: dispatch-cases
-        if: ${{  github.event_name == 'workflow_dispatch' }}
-        working-directory: packages/cli/tests/e2e
-        run: |
-          inputCases='${{ github.event.inputs.cases }}'
-          if [ -z "$inputCases" ]; then
-            allCases=`find . -wholename "*.tests.ts" | jq -Rsc '[split("\n") | .[]| select(.!="")]'`
-            echo "::set-output name=cases::$allCases"
-          else
-            echo "::set-output name=cases::$inputCases"
-          fi
-
-      - name: E2E Test clean
-        working-directory: packages/cli
-        run: |
-          npm run test:e2e:clean
-
-  execute-case:
-    if: ${{ needs.setup.outputs.cases }}
-    env:
-      AZURE_ACCOUNT_NAME: ${{ secrets.TEST_USER_NAME }}
-      AZURE_ACCOUNT_OBJECT_ID: ${{ secrets.TEST_USER_OBJECT_ID }}
-      AZURE_ACCOUNT_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.TEST_SUBSCRIPTION_ID }}
-      AZURE_TENANT_ID: ${{ secrets.TEST_TENANT_ID }}
-      M365_ACCOUNT_NAME: ${{ secrets.TEST_USER_NAME }}
-      M365_ACCOUNT_PASSWORD: ${{ secrets.TEST_USER_PASSWORD }}
-      M365_TENANT_ID: ${{ secrets.TEST_TENANT_ID_2 }}
-      CI_ENABLED: "true"
-      M365_ACCOUNT_COLLABORATOR: ${{ secrets.TEST_COLLABORATOR_USER_NAME }}
-      AZURE_DEVOPS_EXT_PAT: ${{ secrets.ADO_PAT }}
-    needs: setup
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        cases: ${{ fromJson(needs.setup.outputs.cases) }}
-    name: ${{ matrix.cases }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
-
-      - name: Setup node
-        uses: actions/setup-node@v2.1.2
-        with:
-          node-version: 14
-
-      - name: Download Simple Auth bits
-        uses: nick-invision/retry@v2
-        with:
-          timeout_minutes: 10
-          max_attempts: 10
-          retry_on: error
-          shell: pwsh
-          command: |
-            ./.github/scripts/download-simpleauth.sh
-
-      - name: Setup project
-        uses: nick-invision/retry@v2
-        with:
-          timeout_minutes: 10
-          max_attempts: 10
-          retry_on: error
-          command: |
-            npm run setup
-
-      - name: Package CLI and install
-        working-directory: packages/cli
-        run: |
-          rm -f *.tgz
-          npm pack
-          mv *.tgz teamsfx-cli.tgz
-          npm install -g teamsfx-cli.tgz
-
-      - name: print system info
-        run: |
-          lscpu
-
-      - name: run test
-        working-directory: packages/cli/tests/e2e
-        run: |
-          file=`find . -wholename "${{ matrix.cases }}"`
-          if [ ! -z "$file" ]; then
-            npx mocha --reporter @mochajs/json-file-reporter $file --parallel
-          fi
-
-      - name: get job id
-        id: get-job-id
-        if: ${{ always() }}
-        run: |
-          result=`curl \
-            -u :${{ secrets.GITHUB_TOKEN }}\
-            https://api.github.com/repos/OfficeDev/TeamsFx/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs?per_page=100`
-          job_id=`echo $result | jq -r '.jobs[] | select(.name | contains("${{ matrix.cases }}")).id'`
-          echo "::set-output name=job_id::$job_id"
-
-      - name: Upload test report
-        uses: actions/upload-artifact@v2
-        if: failure()
-        with:
-          name: ${{ steps.get-job-id.outputs.job_id}}.json
-          path: |
-            ./packages/cli/tests/e2e/report.json
-
-      - name: Sync to Azure DevOps Test Plan
-        if: ${{ always() && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
-        run: |
-          version=$(node -p -e "require('./packages/cli/package.json').version")
-          npx ts-node .github/scripts/testPlan.ts sync ./packages/cli/tests/e2e/report.json cli $version
-
   report:
-    if: ${{ failure() }}
-    needs: execute-case
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -233,20 +15,33 @@ jobs:
         run: |
           result=`curl \
             -u :${{ secrets.GITHUB_TOKEN }}\
-            https://api.github.com/repos/OfficeDev/TeamsFx/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}/jobs?per_page=100`
+            https://api.github.com/repos/OfficeDev/TeamsFx/actions/runs/1755580895/attempts/1/jobs?per_page=100`
 
-          failures=`echo $result | jq -r '.jobs[]| select(.name | contains("tests.ts")) | select(.conclusion=="failure").name'`
+          cases=`echo $result | jq -r '.jobs[] | select(.name | contains("tests.ts")) | .name'`
 
           declare -A email_uid
-          description="<tr> <th>Case</th> <th>Author</th> </tr>"
+          declare -A email_display
+          description="<tr> <th>Case</th> <th>Status</th> <th>Author</th> </tr>"
           emails="vsciotadt@microsoft.com"
-          while IFS= read -r failure;
+          while IFS= read -r case;
           do
-            file="tests/e2e/$failure"
+            if [ -z "$case" ]; then
+              continue
+            fi
+             
+            status=`echo $result | jq --arg case $case -r '.jobs[] | select(.name == $case ) | .conclusion'`
+            label=""
+            if [ "$status" == "success" ]; then
+              label="<span class=\"label success\">success</span>"
+            else
+              label="<span class=\"label danger\">failure</span>"
+            fi
+
+            file="tests/e2e/$case"
             email=`cat $file | grep '@author' | grep -i -o '[A-Z0-9._%+-]\+@[A-Z0-9.-]\+\.[A-Z]\{2,4\}'`
 
             if [ -z "$email" ]; then
-              description="$description <tr> <td>$file</td> <td>N/A</td> </tr> "
+              description="$description <tr> <td>$file</td> <td>$label</td> <td>N/A</td> </tr> "
               continue
             fi
 
@@ -257,24 +52,26 @@ jobs:
             if [ ! -v "email_uid[$email]" ]; then
               resp=$(curl -u :${{ secrets.ADO_PAT }} "https://vssps.dev.azure.com/msazure/_apis/identities?searchFilter=General&filterValue=$email&queryMembership=None&api-version=6.0")
               uid=$(echo $resp | jq '.value | .[] | .id' | xargs echo)
+              display=$(echo $resp | jq '.value | .[] | .providerDisplayName' | xargs echo)
               email_uid[$email]=$uid
+              email_display[$email]=$display
             fi
+             
+            author="<a id=\"${email_uid[$email]}\" href=\"mailto:$email\"><span>@${email_display[$email]}</span></a>"
 
-            description="$description <tr> <td>$file</td> <td><a href=\\\"#\\\" data-vss-mention=\\\"version:2.0,${email_uid[$email]}\\\">$email</a></td> </tr> "
+            description="$description <tr> <td>$file</td> <td>$label<td> <td>$author</td> </tr> "
           done <<< $failures
 
           echo "::set-output name=description::$description"
-          echo "::set-output name=emails::$emails"
 
       - name: Send E-mail to the whole team
         uses: satak/webrequest-action@master
-        if: ${{  github.event_name == 'schedule' }}
         with:
           url: https://prod-30.eastus.logic.azure.com:443/workflows/9aa865da96054bd89749c2d4ce68df8e/triggers/manual/paths/invoke?api-version=2016-10-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=uIoB06NUHSnKoZeWjNDI9t4rrhbTBKxJNiBtDoMRSQs
           method: POST
           payload: |
             {
-              "to": "${{ steps.list-failed-jobs.outputs.emails }}",
+              "to": "haolong@microsoft.com",
               "body": "<table class=\"w3-table w3-striped w3-bordered\">${{ steps.list-failed-jobs.outputs.description }}</table> <br /> The detail can be found here: https://github.com/OfficeDev/TeamsFx/actions/runs/${{ github.run_id }}",
               "subject": "[Failure] TeamsFx CLI E2E Test ${{ github.run-id }}",
               "apiKey": "${{ secrets.MAIL_API_KEY }}"
