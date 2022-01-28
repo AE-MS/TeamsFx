@@ -50,17 +50,8 @@ jobs:
             if [[ ! "$emails" == *"$email"* ]]; then
               emails="$emails;$email"
             fi
-
-            if [ ! -v "email_uid[$email]" ]; then
-              resp=$(curl -u :${{ secrets.ADO_PAT }} "https://vssps.dev.azure.com/msazure/_apis/identities?searchFilter=General&filterValue=$email&queryMembership=None&api-version=6.0")
-              echo $resp
-              uid=$(echo $resp | jq '.value | .[] | .id' | xargs echo)
-              display=$(echo $resp | jq '.value | .[] | .providerDisplayName' | xargs echo)
-              email_uid[$email]=$uid
-              email_display[$email]=$display
-            fi
              
-            author="<a id=\"${email_uid[$email]}\" href=\"mailto:$email\"><span>@${email_display[$email]}</span></a>"
+            author="<a href=\"mailto:$email\"><span>$email</span></a>"
 
             description="$description <tr> <td>$file</td> <td>$label<td> <td>$author</td> </tr> "
           done <<< $cases
