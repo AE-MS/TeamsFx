@@ -21,7 +21,9 @@ jobs:
 
           declare -A email_uid
           declare -A email_display
+
           description="<tr> <th>Case</th> <th>Status</th> <th>Author</th> </tr>"
+
           emails="vsciotadt@microsoft.com"
           while IFS= read -r case;
           do
@@ -60,7 +62,7 @@ jobs:
             author="<a id=\"${email_uid[$email]}\" href=\"mailto:$email\"><span>@${email_display[$email]}</span></a>"
 
             description="$description <tr> <td>$file</td> <td>$label<td> <td>$author</td> </tr> "
-          done <<< $failures
+          done <<< $cases
 
           echo "::set-output name=description::$description"
 
