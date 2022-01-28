@@ -53,6 +53,7 @@ jobs:
 
             if [ ! -v "email_uid[$email]" ]; then
               resp=$(curl -u :${{ secrets.ADO_PAT }} "https://vssps.dev.azure.com/msazure/_apis/identities?searchFilter=General&filterValue=$email&queryMembership=None&api-version=6.0")
+              echo $resp
               uid=$(echo $resp | jq '.value | .[] | .id' | xargs echo)
               display=$(echo $resp | jq '.value | .[] | .providerDisplayName' | xargs echo)
               email_uid[$email]=$uid
