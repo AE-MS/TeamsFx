@@ -19,14 +19,12 @@ jobs:
 
           cases=`echo $result | jq -r '.jobs[] | select(.name | contains("tests.ts")) | .name'`
 
-          declare -A email_uid
-          declare -A email_display
-
           description="<tr> <th>Case</th> <th>Status</th> <th>Author</th> </tr>"
 
           emails="vsciotadt@microsoft.com"
           while IFS= read -r case;
           do
+            echo $case
             if [ -z "$case" ]; then
               continue
             fi
@@ -38,6 +36,7 @@ jobs:
             else
               label="<span class=\"label danger\">failure</span>"
             fi
+            echo $label
 
             file="tests/e2e/$case"
             email=`cat $file | grep '@author' | grep -i -o '[A-Z0-9._%+-]\+@[A-Z0-9.-]\+\.[A-Z]\{2,4\}'`
@@ -52,6 +51,7 @@ jobs:
             fi
              
             author="<a href=\"mailto:$email\"><span>$email</span></a>"
+            echo $author
 
             description="$description <tr> <td>$file</td> <td>$label<td> <td>$author</td> </tr> "
           done <<< $cases
