@@ -44,9 +44,9 @@ jobs:
             
             label=""
             if [ "$status" == "success" ]; then
-              label="<span class=\"label success\">success</span>"
+              label="<span class=\\\"label success\\\">success</span>"
             else
-              label="<span class=\"label danger\">failure</span>"
+              label="<span class=\\\"label danger\\\">failure</span>"
             fi
             echo $label
 
@@ -54,7 +54,7 @@ jobs:
             if [ -z "$email" ]; then
               author="N/A"
             else
-              author="<a href=\"mailto:$email\"><span>$email</span></a>"
+              author="<a href=\\\"mailto:$email\\\"><span>$email</span></a>"
             fi
             echo $author
 
